@@ -35,42 +35,20 @@ LKTracker::~LKTracker(){
 }
 
 
-bool LKTracker::trackf2f(const GpuMat& gImg1, const GpuMat& gImg2, GpuMat &gPoints1, GpuMat &gPoints2) {
-	//计算正反光流
-	gFlow->sparse(gImg1, gImg2, gPoints1, gPoints2, gStatus); // compute gPoints2
-	gFlow->sparse(gImg2, gImg1, gPoints2, gPointsFB, gFBStatus); //compute gPointsFB
 
-	vector<Point2f> points1, points2;
-	download(gPoints1, points1);
-	download(gPoints2, points2);
-
-	//Compute the real FB-error
-	FB_error.clear();
-	for (int i = 0; i < points1.size(); ++i)
-	{
-		FB_error.push_back(norm(pointsFB[i] - points1[i]));
-	}
-	//Filter out points with FB_error[i] > mean(FB_error) && points with sim_error[i] > mean(sim_error)
-	normCrossCorrelation(gImg1, gImg2, gPoints1, gPoints2, points1, points2);
-	bool retVal = filterPts(points1, points2);
-	//更新gpu数据
-	upload(points1, gPoints1);
-	upload(points2, gPoints2);
-	return retVal;
-}
-
-
-bool LKTracker::trackf2f(const Mat& img1, const Mat& img2, vector<Point2f> &points1, vector<cv::Point2f> &points2)
+bool LKTracker::trackf2f(const Mat& img1, const Mat& img2, vector<Point2f> &points1, vector<cv::Point2f> &points2)//普通版本
 {
+	cout << "=================================进入track2f================================================================" << endl;
+	GpuMat gImg1, gImg2, gPoints1, gPoints2, gStatus, gPointsFB, gFBStatus;
 	//TODO!:implement c function cvCalcOpticalFlowPyrLK() or Faster tracking function
 #ifdef  MEASURE_TIME
 	clock_t startTime = clock();
 #endif
 #ifndef USE_CUDA
-	//Forward-Backward tracking
+	//Forward-Backward tracking；前向轨迹跟踪  
 	calcOpticalFlowPyrLK(img1, img2, points1, points2, status, similarity, window_size, level, term_criteria, lambda, 0/**/);
 
-	//TomHeaven注释：这里的过滤可能漏掉一些运动速度快的目标，故而去掉过滤
+	//TomHeaven注释：这里的过滤可能漏掉一些运动速度快的目标，故而去掉过滤；backward trajectory 后向轨迹跟踪  
 	calcOpticalFlowPyrLK(img2, img1, points2, pointsFB, FB_status, FB_error, window_size, level, term_criteria, lambda, 0);
 #else
 	/////////// GPU 加速
@@ -90,13 +68,14 @@ bool LKTracker::trackf2f(const Mat& img1, const Mat& img2, vector<Point2f> &poin
 	gPoints1.upload(p1);
 	gPoints2.upload(p2);*/
 	// 上传数据
+	std::cout <<"-----------------------------LKTracker.h上传数据---------------------------------2"<<'\n'<<img1.size().height<<endl;
 	gImg1.upload(img1);
 	gImg2.upload(img2);
 	upload(points1, gPoints1);
-	upload(points2, gPoints2);
+	//upload(points2, gPoints2);//报错！！！！！！！！！！！！！！！！！！！！
 
 
-	//计算正反光流
+	//计算正反光流;Calculate an optical flow for a sparse feature set.
 	gFlow->sparse(gImg1, gImg2, gPoints1, gPoints2, gStatus); // compute gPoints2
 	gFlow->sparse(gImg2, gImg1, gPoints2, gPointsFB, gFBStatus); //compute gPointsFB
 	
@@ -122,6 +101,9 @@ bool LKTracker::trackf2f(const Mat& img1, const Mat& img2, vector<Point2f> &poin
 	}
 	//Filter out points with FB_error[i] > mean(FB_error) && points with sim_error[i] > mean(sim_error)
 	normCrossCorrelation(img1, img2, points1, points2);
+
+
+	cout << "=================================track2f执行完毕================================================================" << endl;
 	return filterPts(points1, points2);
 	//return true;
 }

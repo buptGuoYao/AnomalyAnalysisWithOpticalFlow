@@ -8,6 +8,8 @@ using namespace cv;
 
 using namespace cv::gpu;
 
+
+
 /**********************************************************************************************************/
 /*   以下为子函数
 /**********************************************************************************************************/
@@ -242,6 +244,9 @@ void DenseSample1(const Mat& grey, std::vector<Point2f>& points, const double qu
 		}
 }
 
+
+
+
 /**  计算单密度光流 
   @param img1 输入的前帧图像
   @param img2 输入的后帧图像
@@ -260,6 +265,7 @@ bool calcSparseOpticalFlow(const Mat & img1, const Mat & img2, Mat & xflow, Mat 
 						   Mat & angle, Mat & flowmag, Mat & sparseMask, Mat & showMat,const int min_distance, const Mat & mask, const float angleOffset = 0.0f)
 {
 	size_t i;
+	LKTracker track;
 
 	//首先转化成灰度图像
 	Mat gray1,gray2;
@@ -276,7 +282,7 @@ bool calcSparseOpticalFlow(const Mat & img1, const Mat & img2, Mat & xflow, Mat 
 	//Shi-Tomasi角点
 	std::vector<Point2f> points1(0);
 
-	int maxCorners = 10000;
+	int maxCorners = 1000;
 	double qualityLevel = 0.001;
 
 #ifdef  MEASURE_TIME
@@ -286,20 +292,30 @@ bool calcSparseOpticalFlow(const Mat & img1, const Mat & img2, Mat & xflow, Mat 
 #ifdef USE_CUDA 
 	GoodFeaturesToTrackDetector_GPU* gfDetector = new GoodFeaturesToTrackDetector_GPU(maxCorners, qualityLevel, min_distance);
 	GpuMat gGray1, gCorners, gMask;
+	cout << "----------------------------------------------------EventDetection.h---------------------------------------" << endl;
 	gGray1.upload(gray1);
+
 	gMask.upload(mask);
+	cout << "----------------------------------------------------EventDetection.h upload 完毕---------------------------------------" << endl;
 #ifdef  MEASURE_TIME
 	clock_t startTime1 = clock();
 #endif
-	gfDetector->operator()(gGray1, gCorners, gMask); //void operator ()(const GpuMat& image, GpuMat& corners, const GpuMat& mask = GpuMat());
+	gfDetector->operator()(gGray1, gCorners, gMask); //void operator ()(const GpuMat& image, GpuMat& corners, const GpuMat& mask = GpuMat());这里内存飙升
+
+	gfDetector->releaseMemory();
+
 #ifdef  MEASURE_TIME
 	clock_t endTime1 = clock();
 	printf("goodFeaturesToTrack pure time = %.3f\n", double(endTime1 - startTime1) / CLOCKS_PER_SEC);
 #endif
 	download(gCorners, points1);
+
 #else
 	goodFeaturesToTrack(gray1, points1, maxCorners, qualityLevel, min_distance, mask);
 #endif
+
+	
+
 
 
 #ifdef  MEASURE_TIME
@@ -311,8 +327,10 @@ bool calcSparseOpticalFlow(const Mat & img1, const Mat & img2, Mat & xflow, Mat 
 		return false;
 
 	//采用TLD中前后向校正跟踪方法计算鲁棒光流
-	std::vector<Point2f> points2(0);
-	LKTracker track;
+	cout << "-----------------------------------------------EventDetection.h---------------------------------------采用TLD中前后向校正跟踪方法计算鲁棒光流 " << endl;
+	std::vector<Point2f> points2(0);				//??????????????????????
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 	if (!track.trackf2f(gray1, gray2, points1, points2)){
 		printf("of_result: 0 matches!\n");
 		points1.clear();
@@ -353,6 +371,10 @@ bool calcSparseOpticalFlow(const Mat & img1, const Mat & img2, Mat & xflow, Mat 
 		drawArrow(showMat,points2[i],points1[i],5,30,Scalar(0,0,255), 1, 8);
 	}
 #endif
+
+	cout << "稀疏光流计算完成" << endl;
+
+
 	return true;
 }
 
